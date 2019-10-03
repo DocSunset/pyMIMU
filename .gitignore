@@ -1,0 +1,8 @@
+.DS_Store
+*.swp
+__pycache__/
+*.py[cod]
+*.data
+Session.vim
+env/
+_CalibrationConstants
