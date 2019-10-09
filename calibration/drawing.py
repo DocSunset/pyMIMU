@@ -190,7 +190,7 @@ async def draw_loop(continue_flag, rawdata, caldata):
       (lambda frame: [a.draw() for a in artists]), 
       count(), event_source=frame_ticker, blit=True)
 
-  plt.show(False)
+  plt.show(block=False)
   plt.draw()
   plt.pause(0.001)
 
