@@ -1,8 +1,8 @@
 import numpy as np
 import json
-from calibration.accelerometer import initialparams as ap
-from calibration.gyroscope import initialparams as gp
-from calibration.magnetometer import initialparams as mp
+from .accelerometer import initialparams as ap
+from .gyroscope import initialparams as gp
+from .magnetometer import initialparams as mp
 
 class Flag:
   def __init__(self):

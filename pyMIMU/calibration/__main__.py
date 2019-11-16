@@ -5,13 +5,13 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 from aioconsole import ainput
 
-from calibration.data import *
-from calibration.recorder import AsyncOSC
-from calibration.drawing import draw_loop
-import calibration.accelerometer as accelerometer
-import calibration.magnetometer as magnetometer
-import calibration.gyroscope as gyroscope
-import calibration.staticdetector as static_detector
+from .data import *
+from pyMIMU.utils.drawing import Artist, draw_loop
+from pyMIMU.utils.osc import AsyncOSC
+import pyMIMU.calibration.accelerometer as accelerometer
+import pyMIMU.calibration.magnetometer as magnetometer
+import pyMIMU.calibration.gyroscope as gyroscope
+import pyMIMU.calibration.staticdetector as static_detector
 
 parser = argparse.ArgumentParser(
         description='Calibrate 9DOF MIMU/MARG Sensors', 
@@ -49,19 +49,24 @@ async def main():
       print("Calibrating based on loaded file")
       await calibrate(executor, rawdata, caldata)
 
+  # get port etc in case they weren't specified
   if args.port is None:
     args.port = await ainput("Enter the port number on which to listen for raw data. This can also be specified from the command line with the -port option\nport >> ")
 
-  osc = AsyncOSC(args.port, osc_handler, rawdata)
-  # get port etc in case they weren't specified
+  osc = AsyncOSC(
+      args.port, 
+      osc_handler, rawdata, 
+      outip='192.168.0.255', outport=6006)
+  osc.send("/state/calibrate")
 
   print("Starting osc server")
-  await osc.start_recording()
+  await osc.setup()
 
   print("Starting GUI")
   running = Flag()
   running.set(True)
-  gui = asyncio.create_task(draw_loop(running, rawdata, caldata))
+  gui = asyncio.create_task(
+      draw_loop(running, (2,5), get_artists, rawdata, caldata))
 
   print("Enter c to pause recording, calibrate, and then resume recording")
   print("Enter q to stop recording, calibrate one final time, and then quit")
@@ -81,20 +86,20 @@ async def main():
 
     if user_input == 'c' or user_input == 'C':
       print("Calibrating...")
-      osc.stop_recording()
+      osc.stop()
       await calibrate(executor, rawdata, caldata)
-      osc.resume_recording()
+      osc.resume()
       continue
 
     elif user_input == 'q':
       print("Stopping after final calibration pass...")
-      osc.stop_recording()
+      osc.stop()
       await calibrate(executor, rawdata, caldata)
       break
     
     elif user_input == 'Q':
       print("Quitting without calibrating...")
-      osc.stop_recording()
+      osc.stop()
       break
 
     elif user_input == 's':
@@ -273,5 +278,118 @@ async def calibrate_gyroscope(continue_flag, executor, rawdata, caldata, wait=10
     gresidual, caldata.gyro, caldata.gyro_params, caldata.gyro_bias, caldata.gyro_residual = gyroresults
     caldata.max_gyro_residual = max(caldata.max_gyro_residual, max(np.abs(caldata.gyro_residual)))
     break
+
+def get_artists(fig, axes, rawdata, caldata):
+  return [ 
+        Artist( # raw magnetometer latitude and longitude
+          fig, axes[0][0], (-np.pi, np.pi), (-np.pi/2, np.pi/2), "bo", 0.002,
+          (lambda: rawdata.magn_longitude), (lambda: rawdata.magn_latitude))
+      , Artist( # current raw magnetometer latitude and longitude
+          fig, axes[0][0], (-np.pi, np.pi), (-np.pi/2, np.pi/2), "m+", 1,
+          (lambda: rawdata.magn_longitude[-1] if rawdata.magn_longitude else []), 
+          (lambda: rawdata.magn_latitude[-1] if rawdata.magn_latitude else []))
+      , Artist( # calibrated magnetometer latitude and longitude
+          fig, axes[0][0], (-np.pi, np.pi), (-np.pi/2, np.pi/2), "go", 0.002,
+          (lambda: caldata.magn_longitude), (lambda: caldata.magn_latitude))
+
+      , Artist( # raw magnetometer x y cross section
+          fig, axes[0][1], (-1, 1), (-1, 1), "bo", 0.02,
+          (lambda: [s[0]/rawdata.magn_max for s in rawdata.magn_deduped]), 
+          (lambda: [s[1]/rawdata.magn_max for s in rawdata.magn_deduped]))
+      , Artist( # raw magnetometer y z cross section
+          fig, axes[0][2], (-1, 1), (-1, 1), "bo", 0.02,
+          (lambda: [s[1]/rawdata.magn_max for s in rawdata.magn_deduped]), 
+          (lambda: [s[2]/rawdata.magn_max for s in rawdata.magn_deduped]))
+      , Artist( # raw magnetometer z x cross section
+          fig, axes[0][3], (-1, 1), (-1, 1), "bo", 0.02,
+          (lambda: [s[2]/rawdata.magn_max for s in rawdata.magn_deduped]), 
+          (lambda: [s[0]/rawdata.magn_max for s in rawdata.magn_deduped]))
+
+      , Artist( # current raw magnetometer x y cross section
+          fig, axes[0][1], (-1, 1), (-1, 1), "m+", 1,
+          (lambda: rawdata.magn_deduped[-1][0]/rawdata.magn_max if rawdata.magn_deduped else []), 
+          (lambda: rawdata.magn_deduped[-1][1]/rawdata.magn_max if rawdata.magn_deduped else []))
+      , Artist( # current raw magnetometer y z cross section
+          fig, axes[0][2], (-1, 1), (-1, 1), "m+", 1,
+          (lambda: rawdata.magn_deduped[-1][1]/rawdata.magn_max if rawdata.magn_deduped else []), 
+          (lambda: rawdata.magn_deduped[-1][2]/rawdata.magn_max if rawdata.magn_deduped else []))
+      , Artist( # current raw magnetometer z x cross section
+          fig, axes[0][3], (-1, 1), (-1, 1), "m+", 1,
+          (lambda: rawdata.magn_deduped[-1][2]/rawdata.magn_max if rawdata.magn_deduped else []), 
+          (lambda: rawdata.magn_deduped[-1][0]/rawdata.magn_max if rawdata.magn_deduped else []))
+
+      , Artist( # calibrated magnetometer x y cross section
+          fig, axes[0][1], (-1, 1), (-1, 1), "go", 0.002,
+          (lambda: caldata.magn[0,:] if caldata.magn.size > 0 else []), 
+          (lambda: caldata.magn[1,:] if caldata.magn.size > 0 else []))
+      , Artist( # calibrated magnetometer y z cross section
+          fig, axes[0][2], (-1, 1), (-1, 1), "go", 0.002,
+          (lambda: caldata.magn[1,:] if caldata.magn.size > 0 else []), 
+          (lambda: caldata.magn[2,:] if caldata.magn.size > 0 else []))
+      , Artist( # calibrated magnetometer z x cross section
+          fig, axes[0][3], (-1, 1), (-1, 1), "go", 0.002,
+          (lambda: caldata.magn[2,:] if caldata.magn.size > 0 else []), 
+          (lambda: caldata.magn[0,:] if caldata.magn.size > 0 else []))
+
+      , Artist( # accelerometer latitude and longitude
+          fig, axes[1][0], (-np.pi, np.pi), (-np.pi/2, np.pi/2), "bo", 0.002,
+          (lambda: rawdata.accl_longitude), (lambda: rawdata.accl_latitude))
+      , Artist( # current raw accelerometer latitude and longitude
+          fig, axes[1][0], (-np.pi, np.pi), (-np.pi/2, np.pi/2), "m+", 1,
+          (lambda: rawdata.accl_longitude[-1] if rawdata.accl_longitude else []), 
+          (lambda: rawdata.accl_latitude[-1] if rawdata.accl_latitude else []))
+      , Artist( # calibrated accelerometer latitude and longitude
+          fig, axes[1][0], (-np.pi, np.pi), (-np.pi/2, np.pi/2), "go", 0.002,
+          (lambda: caldata.accl_longitude), (lambda: caldata.accl_latitude))
+
+      , Artist( # raw accelerometer x y cross section
+          fig, axes[1][1], (-1, 1), (-1, 1), "bo", 0.002,
+          (lambda: [s[0]/rawdata.accl_max for s in rawdata.accl]), 
+          (lambda: [s[1]/rawdata.accl_max for s in rawdata.accl]))
+      , Artist( # raw accelerometer y z cross section
+          fig, axes[1][2], (-1, 1), (-1, 1), "bo", 0.002,
+          (lambda: [s[1]/rawdata.accl_max for s in rawdata.accl]), 
+          (lambda: [s[2]/rawdata.accl_max for s in rawdata.accl]))
+      , Artist( # raw accelerometer z x cross section
+          fig, axes[1][3], (-1, 1), (-1, 1), "bo", 0.002,
+          (lambda: [s[2]/rawdata.accl_max for s in rawdata.accl]), 
+          (lambda: [s[0]/rawdata.accl_max for s in rawdata.accl]))
+
+      , Artist( # current raw accelerometer x y cross section
+          fig, axes[1][1], (-1, 1), (-1, 1), "m+", 1,
+          (lambda: rawdata.accl[-1][0]/rawdata.accl_max if rawdata.accl else []), 
+          (lambda: rawdata.accl[-1][1]/rawdata.accl_max if rawdata.accl else []))
+      , Artist( # current raw accelerometer y z cross section
+          fig, axes[1][2], (-1, 1), (-1, 1), "m+", 1,
+          (lambda: rawdata.accl[-1][1]/rawdata.accl_max if rawdata.accl else []), 
+          (lambda: rawdata.accl[-1][2]/rawdata.accl_max if rawdata.accl else []))
+      , Artist( # current raw accelerometer z x cross section
+          fig, axes[1][3], (-1, 1), (-1, 1), "m+", 1,
+          (lambda: rawdata.accl[-1][2]/rawdata.accl_max if rawdata.accl else []), 
+          (lambda: rawdata.accl[-1][0]/rawdata.accl_max if rawdata.accl else []))
+
+      , Artist( # calibrated accelerometer x y cross section
+          fig, axes[1][1], (-1, 1), (-1, 1), "go", 0.002,
+          (lambda: caldata.accl[0,:] if caldata.accl.size > 0 else []), 
+          (lambda: caldata.accl[1,:] if caldata.accl.size > 0 else []))
+      , Artist( # calibrated accelerometer y z cross section
+          fig, axes[1][2], (-1, 1), (-1, 1), "go", 0.002,
+          (lambda: caldata.accl[1,:] if caldata.accl.size > 0 else []), 
+          (lambda: caldata.accl[2,:] if caldata.accl.size > 0 else []))
+      , Artist( # calibrated accelerometer z x cross section
+          fig, axes[1][3], (-1, 1), (-1, 1), "go", 0.002,
+          (lambda: caldata.accl[2,:] if caldata.accl.size > 0 else []), 
+          (lambda: caldata.accl[0,:] if caldata.accl.size > 0 else []))
+
+      , Artist( # accelerometer residual / cost function
+          fig, axes[1][4], None, None, "r-", 1,
+          (lambda: np.arange(len(caldata.accl_residual))), 
+          (lambda: caldata.accl_residual/caldata.max_accl_residual))
+
+      , Artist( # magnetometer residual / cost function
+          fig, axes[0][4], None, None, "r-", 1,
+          (lambda: np.arange(len(caldata.magn_residual))), 
+          (lambda: caldata.magn_residual/caldata.max_magn_residual))
+      ]
 
 asyncio.run(main())

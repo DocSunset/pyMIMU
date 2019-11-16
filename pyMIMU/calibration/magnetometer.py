@@ -1,7 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
-from calibration.optimization import *
+from .optimization import *
 
 initialparams = np.array([1, 0, 0, 
                           0, 1, 0, 

@@ -1,7 +1,6 @@
 import numpy as np
-import sys
 
-from calibration.optimization import *
+from .optimization import *
 
 initialparams = np.array([0, 0, 0, 1, 1, 1, 0, 0, 0])
 

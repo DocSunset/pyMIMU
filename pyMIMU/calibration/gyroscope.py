@@ -2,8 +2,9 @@ from matplotlib import pyplot as plt
 import sys
 import numpy as np
 from pyquaternion import Quaternion
-from calibration.staticdetector import signalToIntervals
-from calibration.optimization import *
+
+from .staticdetector import signalToIntervals
+from .optimization import *
 
 initialparams = np.array([0, 0, 0, 0, 0, 0, 1, 1, 1])
 degtorad = 180/np.pi
