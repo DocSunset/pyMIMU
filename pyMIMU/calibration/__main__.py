@@ -91,6 +91,13 @@ async def main():
       osc.resume()
       continue
 
+    if user_input == 'm' or user_input == 'M':
+      print("Calibrating magnetometer only...")
+      osc.stop_recording()
+      await calibrate_magnetometer_only(executor, rawdata, caldata)
+      osc.resume_recording()
+      continue
+
     elif user_input == 'q':
       print("Stopping after final calibration pass...")
       osc.stop()
@@ -262,6 +269,20 @@ async def calibrate_magnetometer(continue_flag, executor, rawdata, caldata, wait
     caldata.magn_latitude, caldata.magn_longitude = vecToCoords(caldata.magn[0], caldata.magn[1], caldata.magn[2])
     caldata.max_magn_residual = max(caldata.max_magn_residual, max(np.abs(caldata.magn_residual)))
     break
+
+async def calibrate_magnetometer_only(executor, rawdata, caldata):
+  magnfuture = executor.submit(magnetometer.calibrate_norm, rawdata.magn, caldata.gravity_samples, caldata.optimal_static_intervals)
+  magnresults = magnfuture.result()
+  mresidual, caldata.magn, caldata.magn_params, caldata.magn_residual = magnresults
+  caldata.magn_latitude, caldata.magn_longitude = vecToCoords(caldata.magn[0], caldata.magn[1], caldata.magn[2])
+  caldata.max_magn_residual = max(caldata.max_magn_residual, max(np.abs(caldata.magn_residual)))
+  max_magn_error = np.max(np.abs(caldata.magn_residual))
+  avg_magn_error = np.mean(np.abs(caldata.magn_residual))
+  avg_magn_norm  = np.mean([np.linalg.norm(h) for h in caldata.magn.T])
+  print(f"Maximum magnetometer error: {max_magn_error}")
+  print(f"Average magnetometer error: {avg_magn_error}")
+  print(f"Average norm of earth's magnetic field: {avg_magn_norm}")
+  magnetometer.printparams_cpp(caldata.magn_params)
 
 async def calibrate_gyroscope(continue_flag, executor, rawdata, caldata, wait=10):
   while continue_flag:
