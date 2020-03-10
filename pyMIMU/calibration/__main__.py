@@ -25,6 +25,10 @@ parser.add_argument('-o', '--savename', type=str,
         help='Specify a file name to save data which can be recalled later to resume calibrating or retrieve calibration constants.', default='')
 parser.add_argument('-c', '--calibrate', action='store_true', 
         help='Instantly run calibration in case a file is loaded. Has no effective if -l is not given.')
+parser.add_argument('-outip', type=str, default='192.168.0.255',
+        help='IP address for transmitting calibration constants')
+parser.add_argument('-outport',  type=int, default=6006,
+        help='UDP port on which to transmit calibration constants')
 
 class CalibrationArgs:
   def __init__(self):
@@ -32,6 +36,8 @@ class CalibrationArgs:
     self.savename = ''
     self.loadname = ''
     self.calibrate = False
+    self.outip = ''
+    self.outport= None
   
 args = CalibrationArgs()
 parser.parse_args(namespace=args)
@@ -56,7 +62,7 @@ async def main():
   osc = AsyncOSC(
       args.port, 
       osc_handler, rawdata, 
-      outip='192.168.0.255', outport=6006)
+      outip=args.outip, outport=args.outport)
   osc.send("/state/calibrate")
 
   print("Starting osc server")
@@ -261,7 +267,7 @@ async def calibrate_magnetometer(continue_flag, executor, rawdata, caldata, wait
       continue
 
     print(" Calibrating magnetometer ")
-    magnfuture = executor.submit(magnetometer.calibrate, rawdata.magn, caldata.gravity_samples, caldata.optimal_static_intervals)
+    magnfuture = executor.submit(magnetometer.calibrate_dot, rawdata.magn, caldata.gravity_samples, caldata.optimal_static_intervals)
     while not magnfuture.done(): 
       await asyncio.sleep(wait)
     magnresults = magnfuture.result()

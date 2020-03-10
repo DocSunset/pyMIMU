@@ -1,7 +1,7 @@
 import numpy as np
 import asyncio
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from itertools import count
@@ -66,22 +66,27 @@ async def draw_loop(continue_flag, subplots, get_artists_func, *get_artists_args
   # be called at each animation frame allowing you to update their data
   print("Setting up gui")
   fig, axes = plt.subplots(*subplots)
+  print("Getting artists")
   artists = get_artists_func(fig, axes, *get_artists_args)
+  print("Setting up artists")
   for a in artists: a.setup()
   for row in axes: 
     for ax in row:
       ax.set_xticks([])
       ax.set_yticks([])
   
+  print("Setting up animation")
   frame_ticker = AsyncAnimationEventSource()
   aniation = FuncAnimation(fig, 
       (lambda frame: [a.draw() for a in artists]), 
       count(), event_source=frame_ticker, blit=True)
 
+  print("Plotting")
   plt.show(block=False)
   plt.draw()
   plt.pause(0.001)
 
+  print("Starting animation")
   while continue_flag:
     frame_ticker.tick() # generates an event which causes the animation to tick
     fig.canvas.start_event_loop(0.001)
