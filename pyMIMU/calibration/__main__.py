@@ -36,8 +36,8 @@ class CalibrationArgs:
     self.savename = ''
     self.loadname = ''
     self.calibrate = False
-    self.outip = ''
-    self.outport= None
+    self.outip = '192.168.0.255'
+    self.outport= 6006
   
 args = CalibrationArgs()
 parser.parse_args(namespace=args)
@@ -59,6 +59,8 @@ async def main():
   if args.port is None:
     args.port = await ainput("Enter the port number on which to listen for raw data. This can also be specified from the command line with the -port option\nport >> ")
 
+  print(f"Listening on port {args.port}")
+  print(f"Sending to device at {args.outip}:{args.outport}")
   osc = AsyncOSC(
       args.port, 
       osc_handler, rawdata, 
@@ -73,6 +75,7 @@ async def main():
   running.set(True)
   gui = asyncio.create_task(
       draw_loop(running, (2,5), get_artists, rawdata, caldata))
+  await asyncio.sleep(1)
 
   print("Enter c to pause recording, calibrate, and then resume recording")
   print("Enter q to stop recording, calibrate one final time, and then quit")
@@ -81,7 +84,7 @@ async def main():
   print("Enter s to save the data recorded so far")
   print("Enter l to load raw data from a file")
   print("Enter L to load a file and immediately calibrate based on it")
-  if args.savename is not '': 
+  if args.savename != '': 
     print(f"Raw data will be saved to {args.savename}.json on quit")
     print(f"Run the program again with -o {args.savename} to reload this data later")
 
@@ -194,7 +197,7 @@ async def transmit(osc, caldata):
 
 def osc_handler(address, refs, *args) -> None:
   rawdata = refs[0]
-  if len(args) is not 10: 
+  if len(args) != 10: 
     print(f"Warning: OSC got {address} with length {len(args)}, expected 10")
     return
   for a in args:
